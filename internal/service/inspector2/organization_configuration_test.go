@@ -23,9 +23,10 @@ func TestAccInspector2OrganizationConfiguration_serial(t *testing.T) {
 	t.Parallel()
 
 	testCases := map[string]func(t *testing.T){
-		"basic":      testAccOrganizationConfiguration_basic,
-		"disappears": testAccOrganizationConfiguration_disappears,
-		"ec2ECR":     testAccOrganizationConfiguration_ec2ECR,
+		"basic":        testAccOrganizationConfiguration_basic,
+		"disappears":   testAccOrganizationConfiguration_disappears,
+		"ec2ECR":       testAccOrganizationConfiguration_ec2ECR,
+		"ec2ECRLamnda": testAccOrganizationConfiguration_ec2ECRLambda,
 	}
 
 	acctest.RunSerialTests1Level(t, testCases, 0)
@@ -47,11 +48,12 @@ func testAccOrganizationConfiguration_basic(t *testing.T) {
 		CheckDestroy:             testAccCheckOrganizationConfigurationDestroy(ctx),
 		Steps: []resource.TestStep{
 			{
-				Config: testAccOrganizationConfigurationConfig_basic(true, false),
+				Config: testAccOrganizationConfigurationConfig_basic(true, false, false),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckOrganizationConfigurationExists(ctx, resourceName),
 					resource.TestCheckResourceAttr(resourceName, "auto_enable.0.ec2", "true"),
 					resource.TestCheckResourceAttr(resourceName, "auto_enable.0.ecr", "false"),
+					resource.TestCheckResourceAttr(resourceName, "auto_enable.0.lambda", "false"),
 				),
 			},
 		},
@@ -74,7 +76,7 @@ func testAccOrganizationConfiguration_disappears(t *testing.T) {
 		CheckDestroy:             testAccCheckOrganizationConfigurationDestroy(ctx),
 		Steps: []resource.TestStep{
 			{
-				Config: testAccOrganizationConfigurationConfig_basic(true, false),
+				Config: testAccOrganizationConfigurationConfig_basic(true, false, false),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckOrganizationConfigurationExists(ctx, resourceName),
 					acctest.CheckResourceDisappears(ctx, acctest.Provider, tfinspector2.ResourceOrganizationConfiguration(), resourceName),
@@ -101,11 +103,40 @@ func testAccOrganizationConfiguration_ec2ECR(t *testing.T) {
 		CheckDestroy:             testAccCheckOrganizationConfigurationDestroy(ctx),
 		Steps: []resource.TestStep{
 			{
-				Config: testAccOrganizationConfigurationConfig_basic(true, true),
+				Config: testAccOrganizationConfigurationConfig_basic(true, true, false),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckOrganizationConfigurationExists(ctx, resourceName),
 					resource.TestCheckResourceAttr(resourceName, "auto_enable.0.ec2", "true"),
 					resource.TestCheckResourceAttr(resourceName, "auto_enable.0.ecr", "true"),
+					resource.TestCheckResourceAttr(resourceName, "auto_enable.0.lambda", "false"),
+				),
+			},
+		},
+	})
+}
+
+func testAccOrganizationConfiguration_ec2ECRLambda(t *testing.T) {
+	ctx := acctest.Context(t)
+	resourceName := "aws_inspector2_organization_configuration.test"
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			acctest.PreCheck(t)
+			acctest.PreCheckPartitionHasService(t, names.Inspector2EndpointID)
+			testAccPreCheck(ctx, t)
+			acctest.PreCheckOrganizationManagementAccount(ctx, t)
+		},
+		ErrorCheck:               acctest.ErrorCheck(t, names.Inspector2EndpointID),
+		ProtoV5ProviderFactories: acctest.ProtoV5ProviderFactories,
+		CheckDestroy:             testAccCheckOrganizationConfigurationDestroy(ctx),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccOrganizationConfigurationConfig_basic(true, true, true),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckOrganizationConfigurationExists(ctx, resourceName),
+					resource.TestCheckResourceAttr(resourceName, "auto_enable.0.ec2", "true"),
+					resource.TestCheckResourceAttr(resourceName, "auto_enable.0.ecr", "true"),
+					resource.TestCheckResourceAttr(resourceName, "auto_enable.0.lambda", "true"),
 				),
 			},
 		},
@@ -221,7 +252,7 @@ func testAccCheckOrganizationConfigurationExists(ctx context.Context, name strin
 	}
 }
 
-func testAccOrganizationConfigurationConfig_basic(ec2, ecr bool) string {
+func testAccOrganizationConfigurationConfig_basic(ec2, ecr, lambda bool) string {
 	return fmt.Sprintf(`
 data "aws_caller_identity" "current" {}
 
@@ -233,9 +264,11 @@ resource "aws_inspector2_organization_configuration" "test" {
   auto_enable {
     ec2 = %[1]t
     ecr = %[2]t
+
+    lambda = %[3]t
   }
 
   depends_on = [aws_inspector2_delegated_admin_account.test]
 }
-`, ec2, ecr)
+`, ec2, ecr, lambda)
 }

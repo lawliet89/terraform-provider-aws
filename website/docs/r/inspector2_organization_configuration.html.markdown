@@ -37,6 +37,7 @@ The following arguments are required:
 
 * `ec2` - (Required) Whether Amazon EC2 scans are automatically enabled for new members of your Amazon Inspector organization.
 * `ecr` - (Required) Whether Amazon ECR scans are automatically enabled for new members of your Amazon Inspector organization.
+* `lambda` - (Optional) Whether Amazon Lambda scans are automatically enabled for new members of your Amazon Inspector organization.
 
 ## Attributes Reference
 
