@@ -43,6 +43,21 @@ func ResourceOrganizationConfiguration() *schema.Resource {
 				Computed:         true,
 				ValidateDiagFunc: enum.Validate[types.AutoEnableStandards](),
 			},
+			"organization_configuration": {
+				Type:             schema.TypeSet,
+				Optional:         true,
+				Computed:         true,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"configuration_type": {
+							Type:             schema.TypeString,
+							Optional:         true,
+							Computed:         true,
+							ValidateDiagFunc: enum.Validate[types.OrganizationConfigurationConfigurationType](),
+						},
+					},
+				},
+			},
 		},
 	}
 }
