@@ -65,6 +65,16 @@ func ResourceFunction() *schema.Resource {
 				Required:     true,
 				ValidateFunc: validation.StringInSlice(cloudfront.FunctionRuntime_Values(), false),
 			},
+			"key_value_store_association": {
+				Type:     schema.TypeSet,
+				Optional: true,
+				Elem: map[string]*schema.Schema{
+					"key_value_store_arn": {
+						Type:     schema.TypeString,
+						Required: true,
+					},
+				},
+			},
 			"status": {
 				Type:     schema.TypeString,
 				Computed: true,
@@ -78,11 +88,13 @@ func resourceFunctionCreate(ctx context.Context, d *schema.ResourceData, meta in
 	conn := meta.(*conns.AWSClient).CloudFrontConn(ctx)
 
 	functionName := d.Get("name").(string)
+	keyValueAssociations := resourceFunctionExpandKeyValueStoreAssociation(d.Get("key_value_store_association").(*schema.Set).List())
 	input := &cloudfront.CreateFunctionInput{
 		FunctionCode: []byte(d.Get("code").(string)),
 		FunctionConfig: &cloudfront.FunctionConfig{
-			Comment: aws.String(d.Get("comment").(string)),
-			Runtime: aws.String(d.Get("runtime").(string)),
+			Comment:                   aws.String(d.Get("comment").(string)),
+			Runtime:                   aws.String(d.Get("runtime").(string)),
+			KeyValueStoreAssociations: keyValueAssociations,
 		},
 		Name: aws.String(functionName),
 	}
@@ -136,6 +148,10 @@ func resourceFunctionRead(ctx context.Context, d *schema.ResourceData, meta inte
 	d.Set("runtime", describeFunctionOutput.FunctionSummary.FunctionConfig.Runtime)
 	d.Set("status", describeFunctionOutput.FunctionSummary.Status)
 
+	if err := d.Set("key_value_store_association", resourceFunctionFlattenKeyValueStoreAssociation(describeFunctionOutput.FunctionSummary.FunctionConfig.KeyValueStoreAssociations)); err != nil {
+		return sdkdiag.AppendErrorf(diags, "setting key_value_store_association: %s", err)
+	}
+
 	getFunctionOutput, err := conn.GetFunctionWithContext(ctx, &cloudfront.GetFunctionInput{
 		Name:  aws.String(d.Id()),
 		Stage: aws.String(cloudfront.FunctionStageDevelopment),
@@ -165,12 +181,14 @@ func resourceFunctionUpdate(ctx context.Context, d *schema.ResourceData, meta in
 	conn := meta.(*conns.AWSClient).CloudFrontConn(ctx)
 	etag := d.Get("etag").(string)
 
-	if d.HasChanges("code", "comment", "runtime") {
+	if d.HasChanges("code", "comment", "runtime", "key_value_store_association") {
+		keyValueAssociations := resourceFunctionExpandKeyValueStoreAssociation(d.Get("key_value_store_association").(*schema.Set).List())
 		input := &cloudfront.UpdateFunctionInput{
 			FunctionCode: []byte(d.Get("code").(string)),
 			FunctionConfig: &cloudfront.FunctionConfig{
-				Comment: aws.String(d.Get("comment").(string)),
-				Runtime: aws.String(d.Get("runtime").(string)),
+				Comment:                   aws.String(d.Get("comment").(string)),
+				Runtime:                   aws.String(d.Get("runtime").(string)),
+				KeyValueStoreAssociations: keyValueAssociations,
 			},
 			Name:    aws.String(d.Id()),
 			IfMatch: aws.String(etag),
@@ -222,4 +240,38 @@ func resourceFunctionDelete(ctx context.Context, d *schema.ResourceData, meta in
 	}
 
 	return diags
+}
+
+func resourceFunctionExpandKeyValueStoreAssociation(associations []interface{}) *cloudfront.KeyValueStoreAssociations {
+	if len(associations) == 0 {
+		return nil
+	}
+	items := []*cloudfront.KeyValueStoreAssociation{}
+
+	for _, association := range associations {
+		item := association.(map[string]interface{})
+		items = append(items, &cloudfront.KeyValueStoreAssociation{
+			KeyValueStoreARN: aws.String(item["key_value_store_arn"].(string)),
+		})
+	}
+
+	return &cloudfront.KeyValueStoreAssociations{
+		Items:    items,
+		Quantity: aws.Int64(int64(len(items))),
+	}
+}
+
+func resourceFunctionFlattenKeyValueStoreAssociation(associations *cloudfront.KeyValueStoreAssociations) []interface{} {
+	if associations == nil {
+		return nil
+	}
+	items := []interface{}{}
+
+	for _, association := range associations.Items {
+		items = append(items, map[string]interface{}{
+			"key_value_store_arn": aws.StringValue(association.KeyValueStoreARN),
+		})
+	}
+
+	return items
 }
